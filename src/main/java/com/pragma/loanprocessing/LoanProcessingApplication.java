@@ -1,10 +1,12 @@
 package com.pragma.loanprocessing;
 
+import java.time.Duration;
+
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
-import org.springframework.retry.annotation.EnableRetry;
+
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
@@ -14,17 +16,25 @@ import io.github.resilience4j.retry.RetryRegistry;
 import io.github.resilience4j.timelimiter.TimeLimiter;
 import io.github.resilience4j.timelimiter.TimeLimiterConfig;
 import io.github.resilience4j.timelimiter.TimeLimiterRegistry;
-import java.time.Duration;
 
+/** Punto de entrada de la aplicación de procesamiento de préstamos. */
 @SpringBootApplication
 @EnableConfigurationProperties
-@EnableRetry
 public class LoanProcessingApplication {
     
+    /**
+     * Arranca el contexto de Spring Boot.
+     * @param args argumentos de línea de comandos
+     */
     public static void main(String[] args) {
         SpringApplication.run(LoanProcessingApplication.class, args);
     }
     
+    /**
+     * Circuit breaker para las llamadas al motor de evaluación.
+     * @param registry registro de circuit breakers
+     * @return circuit breaker configurado
+     */
     @Bean
     public CircuitBreaker loanEvaluationCircuitBreaker(CircuitBreakerRegistry registry) {
         CircuitBreakerConfig config = CircuitBreakerConfig.custom()
@@ -38,6 +48,11 @@ public class LoanProcessingApplication {
         return registry.circuitBreaker("loanEvaluation", config);
     }
     
+    /**
+     * Política de reintentos para las llamadas al motor de evaluación.
+     * @param registry registro de reintentos
+     * @return retry configurado
+     */
     @Bean
     public Retry loanEvaluationRetry(RetryRegistry registry) {
         RetryConfig config = RetryConfig.custom()
@@ -49,6 +64,11 @@ public class LoanProcessingApplication {
         return registry.retry("loanEvaluation", config);
     }
     
+    /**
+     * Límite de tiempo para las llamadas al motor de evaluación.
+     * @param registry registro de time limiters
+     * @return time limiter configurado
+     */
     @Bean
     public TimeLimiter loanEvaluationTimeLimiter(TimeLimiterRegistry registry) {
         TimeLimiterConfig config = TimeLimiterConfig.custom()

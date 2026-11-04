@@ -1,46 +1,52 @@
 package com.pragma.loanprocessing.application.usecase;
 
+import java.math.BigDecimal;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 
-import com.pragma.loanprocessing.domain.model.Status;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;
+
 import com.pragma.loanprocessing.domain.model.Applicant;
 import com.pragma.loanprocessing.domain.model.LoanApplication;
 import com.pragma.loanprocessing.domain.port.LoanRegistrationPort;
 import com.pragma.loanprocessing.infrastructure.exception.DuplicateLoanException;
 import com.pragma.loanprocessing.infrastructure.exception.LoanEvaluationException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Component;
 
-import java.math.BigDecimal;
-import java.time.LocalDateTime;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionStage;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-
+/** Caso de uso que registra solicitudes de préstamo. */
 @Component
 public class RegisterLoanUseCase {
 
-    private static final Logger log = LoggerFactory.getLogger(RegisterLoanUseCase.class);
+    private static final Logger LOG = LoggerFactory.getLogger(RegisterLoanUseCase.class);
     private static final int REGISTRATION_TIMEOUT_SECONDS = 3;
 
     private final LoanRegistrationPort loanRegistrationPort;
 
+    /**
+     * Crea el caso de uso con su puerto de registro.
+     * @param loanRegistrationPort puerto hacia el registro de solicitudes
+     */
     public RegisterLoanUseCase(LoanRegistrationPort loanRegistrationPort) {
         this.loanRegistrationPort = loanRegistrationPort;
     }
 
+    /**
+     * Registra una nueva solicitud de préstamo.
+     * @param applicant solicitante
+     * @param requestedAmount monto solicitado
+     * @return solicitud registrada
+     */
     public CompletionStage<LoanApplication> execute(Applicant applicant, BigDecimal requestedAmount) {
         String applicationNumber = generateApplicationNumber(applicant.identificationNumber());
         
-        log.info("Iniciando registro de solicitud con número: {}", applicationNumber);
+        LOG.info("Iniciando registro de solicitud con número: {}", applicationNumber);
 
         return checkIdempotency(applicationNumber)
                 .thenCompose(exists -> {
                     if (Boolean.TRUE.equals(exists)) {
-                        log.warn("Solicitud duplicada detectada para número: {}", applicationNumber);
+                        LOG.warn("Solicitud duplicada detectada para número: {}", applicationNumber);
                         CompletableFuture<LoanApplication> failedFuture = new CompletableFuture<>();
                         failedFuture.completeExceptionally(
                                 new DuplicateLoanException("Ya existe una solicitud con número: " + applicationNumber)
@@ -49,9 +55,9 @@ public class RegisterLoanUseCase {
                     }
                     
                     return retrieveApplicantData(applicant)
-                            .thenCompose retrievedApplicant -> {
+                            .thenCompose(retrievedApplicant -> {
                                 if (retrievedApplicant == null) {
-                                    log.info("Datos del solicitante no encontrados, usando datos originales");
+                                    LOG.info("Datos del solicitante no encontrados, usando datos originales");
                                     retrievedApplicant = applicant;
                                 }
                                 
@@ -67,14 +73,14 @@ public class RegisterLoanUseCase {
                                 
                                 return loanRegistrationPort.registerLoanApplication(loanApplication)
                                         .thenApply(registered -> {
-                                            log.info("Solicitud {} registrada exitosamente con ID: {}", 
+                                            LOG.info("Solicitud {} registrada exitosamente con ID: {}", 
                                                     applicationNumber, registered.getId());
                                             return registered;
                                         });
-                            };
+                            });
                 })
                 .exceptionally(ex -> {
-                    log.error("Error en registro de solicitud {}: {}", applicationNumber, ex.getMessage());
+                    LOG.error("Error en registro de solicitud {}: {}", applicationNumber, ex.getMessage());
                     if (ex.getCause() instanceof DuplicateLoanException) {
                         throw (DuplicateLoanException) ex.getCause();
                     }
@@ -83,12 +89,12 @@ public class RegisterLoanUseCase {
     }
 
     private CompletionStage<Boolean> checkIdempotency(String applicationNumber) {
-        log.debug("Verificando idempotencia para número de solicitud: {}", applicationNumber);
+        LOG.debug("Verificando idempotencia para número de solicitud: {}", applicationNumber);
         return loanRegistrationPort.existsByApplicationNumber(applicationNumber);
     }
 
     private CompletionStage<Applicant> retrieveApplicantData(Applicant applicant) {
-        log.debug("Recuperando datos actualizados del solicitante: {}", applicant.identificationNumber());
+        LOG.debug("Recuperando datos actualizados del solicitante: {}", applicant.identificationNumber());
         return CompletableFuture.completedFuture(applicant);
     }
 
@@ -98,14 +104,25 @@ public class RegisterLoanUseCase {
         return String.format("LN-%s-%s", identificationNumber, uuidSuffix);
     }
 
+    /**
+     * Consulta una solicitud por su ID.
+     * @param applicationId ID de la solicitud
+     * @return solicitud encontrada
+     */
     public CompletionStage<LoanApplication> getApplicationById(UUID applicationId) {
-        log.debug("Consultando solicitud por ID: {}", applicationId);
+        LOG.debug("Consultando solicitud por ID: {}", applicationId);
         return loanRegistrationPort.getApplicationById(applicationId);
     }
 
+    /**
+     * Actualiza el estado de una solicitud.
+     * @param applicationId ID de la solicitud
+     * @param newStatus nuevo estado
+     * @return solicitud actualizada
+     */
     public CompletionStage<LoanApplication> updateApplicationStatus(UUID applicationId, 
                                                                       LoanApplication.Status newStatus) {
-        log.info("Actualizando estado de solicitud {} a {}", applicationId, newStatus);
+        LOG.info("Actualizando estado de solicitud {} a {}", applicationId, newStatus);
         
         if (applicationId == null || newStatus == null) {
             CompletableFuture<LoanApplication> failedFuture = new CompletableFuture<>();
@@ -117,20 +134,27 @@ public class RegisterLoanUseCase {
         
         return loanRegistrationPort.updateApplicationStatus(applicationId, newStatus)
                 .thenApply(updated -> {
-                    log.info("Estado de solicitud {} actualizado exitosamente a {}", 
+                    LOG.info("Estado de solicitud {} actualizado exitosamente a {}", 
                             applicationId, newStatus);
                     return updated;
                 });
     }
 
+    /**
+     * Reintenta el registro de una solicitud a partir de su número original.
+     * @param applicant solicitante
+     * @param requestedAmount monto solicitado
+     * @param originalApplicationNumber número de la solicitud original
+     * @return solicitud existente o recién registrada
+     */
     public CompletionStage<LoanApplication> retryRegistration(Applicant applicant, 
                                                                BigDecimal requestedAmount, 
                                                                String originalApplicationNumber) {
-        log.info("Reintentando registro de solicitud con número original: {}", originalApplicationNumber);
+        LOG.info("Reintentando registro de solicitud con número original: {}", originalApplicationNumber);
         return loanRegistrationPort.existsByApplicationNumber(originalApplicationNumber)
                 .thenCompose(exists -> {
                     if (Boolean.TRUE.equals(exists)) {
-                        log.info("Recuperando solicitud existente: {}", originalApplicationNumber);
+                        LOG.info("Recuperando solicitud existente: {}", originalApplicationNumber);
                         return loanRegistrationPort.getApplicationById(
                                 UUID.nameUUIDFromBytes(originalApplicationNumber.getBytes())
                         );

@@ -1,9 +1,18 @@
 package com.pragma.loanprocessing.domain.model;
 
-import jakarta.validation.constraints.*;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.UUID;
+
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Past;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Size;
 
 /**
  * Entidad de dominio que representa al solicitante de un préstamo.
@@ -19,7 +28,8 @@ public record Applicant(
     String fullName,
 
     @NotBlank(message = "El número de identificación es obligatorio")
-    @Pattern(regexp = "^[A-Za-z0-9]{5,20}$", message = "El número de identificación debe ser alfanumérico entre 5 y 20 caracteres")
+    @Pattern(regexp = "^[A-Za-z0-9]{5,20}$",
+        message = "El número de identificación debe ser alfanumérico entre 5 y 20 caracteres")
     String identificationNumber,
 
     @NotNull(message = "La fecha de nacimiento es obligatoria")
@@ -35,7 +45,7 @@ public record Applicant(
     String email,
 
     @NotBlank(message = "El número de teléfono es obligatorio")
-    @Pattern(regexp = "^\+?[0-9]{10,15}$", message = "El número de teléfono debe contener entre 10 y 15 dígitos")
+    @Pattern(regexp = "^\\+?[0-9]{10,15}$", message = "El número de teléfono debe contener entre 10 y 15 dígitos")
     String phoneNumber,
 
     @NotBlank(message = "La dirección es obligatoria")
