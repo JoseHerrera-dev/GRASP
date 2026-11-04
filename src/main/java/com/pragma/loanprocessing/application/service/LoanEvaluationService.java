@@ -1,16 +1,5 @@
 package com.pragma.loanprocessing.application.service;
 
-import com.pragma.loanprocessing.domain.model.Applicant;
-import com.pragma.loanprocessing.domain.model.LoanApplication;
-import com.pragma.loanprocessing.domain.port.LoanEvaluationPort;
-import com.pragma.loanprocessing.infrastructure.exception.LoanEvaluationException;
-import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
-import io.github.resilience4j.retry.annotation.Retry;
-import io.github.resilience4j.timelimiter.annotation.TimeLimiter;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Service;
-
 import java.math.BigDecimal;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
@@ -18,10 +7,24 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+
+import com.pragma.loanprocessing.domain.model.Applicant;
+import com.pragma.loanprocessing.domain.model.LoanApplication;
+import com.pragma.loanprocessing.domain.port.LoanEvaluationPort;
+import com.pragma.loanprocessing.infrastructure.exception.LoanEvaluationException;
+
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.retry.annotation.Retry;
+import io.github.resilience4j.timelimiter.annotation.TimeLimiter;
+
+/** Servicio que evalúa la elegibilidad del solicitante y crea la solicitud resultante. */
 @Service
 public class LoanEvaluationService {
 
-    private static final Logger log = LoggerFactory.getLogger(LoanEvaluationService.class);
+    private static final Logger LOG = LoggerFactory.getLogger(LoanEvaluationService.class);
     private static final int DEFAULT_MINIMUM_AGE = 18;
     private static final int DEFAULT_MINIMUM_CREDIT_SCORE = 600;
     private static final BigDecimal DEFAULT_INCOME_MULTIPLIER = new BigDecimal("4");
@@ -31,17 +34,28 @@ public class LoanEvaluationService {
 
     private final LoanEvaluationPort loanEvaluationPort;
 
+    /**
+     * Crea el servicio con su puerto de evaluación.
+     * @param loanEvaluationPort puerto hacia el motor de evaluación
+     */
     public LoanEvaluationService(LoanEvaluationPort loanEvaluationPort) {
         this.loanEvaluationPort = loanEvaluationPort;
     }
 
+    /**
+     * Evalúa la elegibilidad del solicitante y crea la solicitud con el resultado.
+     * @param applicant solicitante a evaluar
+     * @param requestedAmount monto solicitado
+     * @param applicationNumber número de la solicitud
+     * @return solicitud creada con el resultado de la evaluación
+     */
     @CircuitBreaker(name = CIRCUIT_BREAKER_NAME, fallbackMethod = "evaluateEligibilityFallback")
     @Retry(name = RETRY_NAME)
     @TimeLimiter(name = TIME_LIMITER_NAME)
     public CompletionStage<LoanApplication> evaluateAndCreateApplication(
             Applicant applicant, BigDecimal requestedAmount, String applicationNumber) {
         
-        log.info("Iniciando evaluación de elegibilidad para solicitante: {} con monto: {}", 
+        LOG.info("Iniciando evaluación de elegibilidad para solicitante: {} con monto: {}", 
                 applicant.identificationNumber(), requestedAmount);
 
         return CompletableFuture.supplyAsync(() -> {
@@ -49,15 +63,15 @@ public class LoanEvaluationService {
                 Boolean eligibilityResult = loanEvaluationPort.evaluateEligibility(
                         applicant, 
                         requestedAmount.doubleValue()
-                ).get(2, TimeUnit.SECONDS);
+                ).toCompletableFuture().get(2, TimeUnit.SECONDS);
 
                 Integer creditScore = loanEvaluationPort.getCreditScore(
                         applicant.identificationNumber()
-                ).get(2, TimeUnit.SECONDS);
+                ).toCompletableFuture().get(2, TimeUnit.SECONDS);
 
                 Boolean hasOverdue = loanEvaluationPort.hasOverdueDebts(
                         applicant.identificationNumber()
-                ).get(2, TimeUnit.SECONDS);
+                ).toCompletableFuture().get(2, TimeUnit.SECONDS);
 
                 String reason = buildEvaluationReason(applicant, requestedAmount, creditScore, hasOverdue);
 
@@ -114,7 +128,7 @@ public class LoanEvaluationService {
 
     private LoanApplication evaluateEligibilityFallback(Applicant applicant, BigDecimal requestedAmount, 
                                                          String applicationNumber, Throwable t) {
-        log.error("Fallback activado para solicitante {}: {}", applicant.identificationNumber(), t.getMessage());
+        LOG.error("Fallback activado para solicitante {}: {}", applicant.identificationNumber(), t.getMessage());
         
         return LoanApplication.create(
                 applicant,
@@ -127,6 +141,12 @@ public class LoanEvaluationService {
         );
     }
 
+    /**
+     * Valida los requisitos mínimos del solicitante para el monto pedido.
+     * @param applicant solicitante a validar
+     * @param requestedAmount monto solicitado
+     * @return true si cumple edad, ingreso y score mínimos
+     */
     public boolean validateApplicantRequirements(Applicant applicant, BigDecimal requestedAmount) {
         if (applicant == null || requestedAmount == null) {
             return false;

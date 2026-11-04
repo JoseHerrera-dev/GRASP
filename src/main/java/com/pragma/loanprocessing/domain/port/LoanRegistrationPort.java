@@ -1,11 +1,10 @@
 package com.pragma.loanprocessing.domain.port;
 
-
-import com.pragma.loanprocessing.domain.model.Status;
-import com.pragma.loanprocessing.domain.model.Applicant;
-import com.pragma.loanprocessing.domain.model.LoanApplication;
 import java.util.UUID;
 import java.util.concurrent.CompletionStage;
+
+import com.pragma.loanprocessing.domain.model.Applicant;
+import com.pragma.loanprocessing.domain.model.LoanApplication;
 
 /**
  * Interfaz que define el puerto para registrar solicitudes de préstamo.
